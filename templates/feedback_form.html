@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Feedback - PhishCheck{% endblock %}
+
+{% block content %}
+<div class="min-h-[60vh] flex items-center justify-center">
+    <div class="bg-white rounded-lg shadow-md p-8 max-w-lg w-full">
+        <h1 class="text-2xl font-bold text-gray-900 mb-2">Help Us Improve</h1>
+        <p class="text-gray-600 mb-6">
+            You indicated our verdict was incorrect. Please help us understand why.
+        </p>
+
+        <div class="bg-gray-50 rounded-lg p-4 mb-6">
+            <div class="text-sm text-gray-500">Original verdict</div>
+            <div class="font-semibold text-lg
+                {% if submission.verdict == 'phishing' %}text-red-600
+                {% elif submission.verdict == 'suspicious' %}text-yellow-600
+                {% else %}text-green-600{% endif %}">
+                {{ submission.verdict|upper }} ({{ submission.confidence }}% confidence)
+            </div>
+            <div class="mt-2 text-sm text-gray-600">
+                <strong>Subject:</strong> {{ submission.subject or 'No subject' }}
+            </div>
+        </div>
+
+        <form action="{{ url_for('feedback_submit', submission_id=submission.id) }}" method="POST">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    Why was this verdict incorrect?
+                </label>
+                <div class="space-y-2">
+                    <label class="flex items-center">
+                        <input type="radio" name="reason" value="known_sender" class="mr-2">
+                        <span class="text-sm">Known sender (vendor/partner)</span>
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="reason" value="expected_email" class="mr-2">
+                        <span class="text-sm">Expected email (invoice, notification, etc.)</span>
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="reason" value="verified" class="mr-2">
+                        <span class="text-sm">Verified through other channel (phone, etc.)</span>
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="reason" value="other" class="mr-2">
+                        <span class="text-sm">Other</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                    Additional notes (optional)
+                </label>
+                <textarea name="notes" rows="3"
+                          class="w-full border border-gray-300 rounded-md px-3 py-2"
+                          placeholder="Any additional context..."></textarea>
+            </div>
+
+            <button type="submit"
+                    class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 font-medium">
+                Submit Feedback
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,7 @@
+.env
+*.db
+__pycache__/
+*.pyc
+detonations/
+venv/
+.pytest_cache/

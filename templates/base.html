@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}PhishCheck{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    {% if session.logged_in %}
+    <!-- Navigation -->
+    <nav class="bg-gray-900 text-white">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-8">
+                    <a href="{{ url_for('dashboard') }}" class="text-xl font-bold">PhishCheck</a>
+                    <div class="flex space-x-4">
+                        <a href="{{ url_for('dashboard') }}"
+                           class="px-3 py-2 rounded-md text-sm font-medium {% if request.endpoint == 'dashboard' %}bg-gray-700{% else %}hover:bg-gray-700{% endif %}">
+                            Overview
+                        </a>
+                        <a href="{{ url_for('submissions') }}"
+                           class="px-3 py-2 rounded-md text-sm font-medium {% if request.endpoint == 'submissions' %}bg-gray-700{% else %}hover:bg-gray-700{% endif %}">
+                            Submissions
+                        </a>
+                        <a href="{{ url_for('campaigns') }}"
+                           class="px-3 py-2 rounded-md text-sm font-medium {% if request.endpoint == 'campaigns' %}bg-gray-700{% else %}hover:bg-gray-700{% endif %}">
+                            Campaigns
+                        </a>
+                        <a href="{{ url_for('accuracy') }}"
+                           class="px-3 py-2 rounded-md text-sm font-medium {% if request.endpoint == 'accuracy' %}bg-gray-700{% else %}hover:bg-gray-700{% endif %}">
+                            Accuracy
+                        </a>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-gray-300 text-sm">{{ session.username }}</span>
+                    <a href="{{ url_for('logout') }}" class="text-gray-300 hover:text-white text-sm">Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

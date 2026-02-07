@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhishCheck</title>
+
+    <!-- Office.js -->
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 16px;
+            background: #f9fafb;
+        }
+        .loading-spinner {
+            border: 3px solid #e5e7eb;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="text-center mb-4">
+        <h1 class="text-xl font-bold text-gray-900">Is This Phishing?</h1>
+    </div>
+
+    <!-- Loading state -->
+    <div id="loading" class="text-center py-8">
+        <div class="loading-spinner mx-auto mb-4"></div>
+        <p class="text-gray-600">Analyzing email...</p>
+    </div>
+
+    <!-- Result -->
+    <div id="result" class="hidden">
+        <!-- Verdict -->
+        <div id="verdictBox" class="rounded-lg p-6 text-center mb-4">
+            <div id="verdictIcon" class="text-5xl mb-2"></div>
+            <div id="verdictText" class="text-2xl font-bold"></div>
+            <div id="confidence" class="text-lg mt-1"></div>
+        </div>
+
+        <!-- Signals -->
+        <div class="bg-white rounded-lg p-4 mb-4">
+            <h3 class="font-semibold text-gray-900 mb-2">Why:</h3>
+            <ul id="signals" class="space-y-2 text-sm"></ul>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex space-x-2 mb-4">
+            <button onclick="deleteEmail()" class="flex-1 bg-red-600 text-white py-2 px-4 rounded font-medium hover:bg-red-700">
+                Delete
+            </button>
+            <button onclick="reportEmail()" class="flex-1 bg-gray-600 text-white py-2 px-4 rounded font-medium hover:bg-gray-700">
+                Report
+            </button>
+        </div>
+
+        <!-- Feedback -->
+        <div class="border-t border-gray-200 pt-4">
+            <p class="text-center text-gray-600 text-sm mb-2">Was this correct?</p>
+            <div class="flex justify-center space-x-4">
+                <button onclick="sendFeedback('correct')" class="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50">
+                    Yes
+                </button>
+                <button onclick="sendFeedback('incorrect')" class="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50">
+                    No
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error -->
+    <div id="error" class="hidden text-center py-8">
+        <div class="text-red-500 text-4xl mb-4">!</div>
+        <p id="errorMessage" class="text-gray-600"></p>
+        <button onclick="analyzeEmail()" class="mt-4 bg-blue-600 text-white py-2 px-4 rounded font-medium hover:bg-blue-700">
+            Try Again
+        </button>
+    </div>
+
+    <!-- Feedback confirmation -->
+    <div id="feedbackThanks" class="hidden text-center py-8">
+        <div class="text-green-500 text-4xl mb-4">&#10003;</div>
+        <p class="text-gray-600">Thank you for your feedback!</p>
+    </div>
+
+    <script src="taskpane.js"></script>
+</body>
+</html>

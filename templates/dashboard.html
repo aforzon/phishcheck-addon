@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - PhishCheck{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
+    <p class="text-gray-600">Real-time phishing threat visibility</p>
+</div>
+
+<!-- Stats Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <!-- Today -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-sm font-medium text-gray-500 uppercase">Today</h3>
+        <div class="mt-2">
+            <span class="text-3xl font-bold text-gray-900">{{ stats_today.total }}</span>
+            <span class="text-gray-500 ml-2">checked</span>
+        </div>
+        <div class="mt-2 flex items-center space-x-4">
+            <span class="inline-flex items-center text-red-600">
+                <span class="w-2 h-2 rounded-full bg-red-600 mr-1"></span>
+                {{ stats_today.phishing }} phishing
+            </span>
+            <span class="inline-flex items-center text-yellow-600">
+                <span class="w-2 h-2 rounded-full bg-yellow-500 mr-1"></span>
+                {{ stats_today.suspicious }} suspicious
+            </span>
+        </div>
+    </div>
+
+    <!-- This Week -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-sm font-medium text-gray-500 uppercase">This Week</h3>
+        <div class="mt-2">
+            <span class="text-3xl font-bold text-gray-900">{{ stats_week.total }}</span>
+            <span class="text-gray-500 ml-2">checked</span>
+        </div>
+        <div class="mt-2 flex items-center space-x-4">
+            <span class="inline-flex items-center text-red-600">
+                <span class="w-2 h-2 rounded-full bg-red-600 mr-1"></span>
+                {{ stats_week.phishing }} phishing
+            </span>
+            <span class="inline-flex items-center text-yellow-600">
+                <span class="w-2 h-2 rounded-full bg-yellow-500 mr-1"></span>
+                {{ stats_week.suspicious }} suspicious
+            </span>
+        </div>
+    </div>
+
+    <!-- This Month -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-sm font-medium text-gray-500 uppercase">This Month</h3>
+        <div class="mt-2">
+            <span class="text-3xl font-bold text-gray-900">{{ stats.total }}</span>
+            <span class="text-gray-500 ml-2">checked</span>
+        </div>
+        <div class="mt-2 flex items-center space-x-4">
+            <span class="inline-flex items-center text-red-600">
+                <span class="w-2 h-2 rounded-full bg-red-600 mr-1"></span>
+                {{ stats.phishing }} phishing
+            </span>
+            <span class="inline-flex items-center text-yellow-600">
+                <span class="w-2 h-2 rounded-full bg-yellow-500 mr-1"></span>
+                {{ stats.suspicious }} suspicious
+            </span>
+        </div>
+    </div>
+</div>
+
+<!-- Campaign Alerts -->
+{% if campaigns %}
+<div class="bg-white rounded-lg shadow mb-8">
+    <div class="p-4 border-b border-gray-200">
+        <h2 class="text-lg font-semibold text-gray-900">Active Campaign Alerts</h2>
+    </div>
+    <div class="divide-y divide-gray-200">
+        {% for campaign in campaigns %}
+        <div class="p-4 {% if campaign.alert_level == 'critical' %}bg-red-50{% elif campaign.alert_level == 'elevated' %}bg-orange-50{% else %}bg-yellow-50{% endif %}">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                        {% if campaign.alert_level == 'critical' %}bg-red-100 text-red-800
+                        {% elif campaign.alert_level == 'elevated' %}bg-orange-100 text-orange-800
+                        {% else %}bg-yellow-100 text-yellow-800{% endif %}">
+                        {{ campaign.alert_level|upper }}
+                    </span>
+                    <span class="ml-2 font-medium text-gray-900">{{ campaign.name|truncate(60) }}</span>
+                </div>
+                <div class="text-sm text-gray-500">
+                    {{ campaign.user_count }} users affected
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="p-4 border-t border-gray-200">
+        <a href="{{ url_for('campaigns') }}" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+            View all campaigns &rarr;
+        </a>
+    </div>
+</div>
+{% endif %}
+
+<!-- Charts Row -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <!-- Volume Chart -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Email Checks (Last 7 Days)</h3>
+        <div style="height: 250px;">
+            <canvas id="volumeChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Department Breakdown -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Top Targeted Departments</h3>
+        {% if stats.by_department %}
+        <div class="space-y-3">
+            {% for dept in stats.by_department[:5] %}
+            <div class="flex items-center">
+                <span class="w-32 text-sm text-gray-600">{{ dept.department or 'Unknown' }}</span>
+                <div class="flex-1 mx-3">
+                    <div class="h-4 bg-gray-200 rounded-full overflow-hidden">
+                        <div class="h-full bg-blue-600 rounded-full"
+                             style="width: {{ (dept.count / stats.total * 100) if stats.total else 0 }}%"></div>
+                    </div>
+                </div>
+                <span class="text-sm font-medium text-gray-900">{{ dept.count }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-gray-500 text-center py-8">No department data available</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Accuracy & Adoption -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Accuracy Stats -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Accuracy (Last 30 Days)</h3>
+        <div class="grid grid-cols-3 gap-4">
+            <div class="text-center">
+                <div class="text-2xl font-bold text-red-600">
+                    {{ "%.1f"|format(feedback_stats.phishing_accuracy) }}%
+                </div>
+                <div class="text-sm text-gray-500">Phishing</div>
+            </div>
+            <div class="text-center">
+                <div class="text-2xl font-bold text-yellow-600">
+                    {{ "%.1f"|format(feedback_stats.suspicious_accuracy) }}%
+                </div>
+                <div class="text-sm text-gray-500">Suspicious</div>
+            </div>
+            <div class="text-center">
+                <div class="text-2xl font-bold text-green-600">
+                    {{ "%.1f"|format(feedback_stats.safe_accuracy) }}%
+                </div>
+                <div class="text-sm text-gray-500">Safe</div>
+            </div>
+        </div>
+        <div class="mt-4 pt-4 border-t border-gray-200">
+            <div class="flex justify-between text-sm">
+                <span class="text-gray-500">Total feedback received</span>
+                <span class="font-medium">{{ feedback_stats.total }}</span>
+            </div>
+            <div class="flex justify-between text-sm mt-2">
+                <span class="text-gray-500">Pending reviews</span>
+                <span class="font-medium {% if feedback_stats.pending > 0 %}text-orange-600{% endif %}">
+                    {{ feedback_stats.pending }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Adoption Stats -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Adoption</h3>
+        <div class="text-center py-4">
+            <div class="text-4xl font-bold text-blue-600">{{ unique_users }}</div>
+            <div class="text-gray-500 mt-1">Active users (30 days)</div>
+        </div>
+        <div class="mt-4 pt-4 border-t border-gray-200">
+            <div class="flex justify-between text-sm">
+                <span class="text-gray-500">Avg checks per user</span>
+                <span class="font-medium">
+                    {{ "%.1f"|format(stats.total / unique_users) if unique_users else 0 }}
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Auto-Learning Stats -->
+{% if learning_stats %}
+<div class="bg-white rounded-lg shadow mt-8">
+    <div class="p-4 border-b border-gray-200">
+        <h2 class="text-lg font-semibold text-gray-900">
+            <span class="mr-2">🧠</span>Auto-Learning System
+        </h2>
+    </div>
+    <div class="p-6">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="text-center p-4 bg-green-50 rounded-lg">
+                <div class="text-2xl font-bold text-green-600">{{ learning_stats.auto_whitelisted }}</div>
+                <div class="text-sm text-gray-600">Auto-Whitelisted</div>
+            </div>
+            <div class="text-center p-4 bg-blue-50 rounded-lg">
+                <div class="text-2xl font-bold text-blue-600">{{ learning_stats.manual_whitelisted }}</div>
+                <div class="text-sm text-gray-600">Manual Whitelisted</div>
+            </div>
+            <div class="text-center p-4 bg-gray-50 rounded-lg">
+                <div class="text-2xl font-bold text-gray-600">{{ learning_stats.total_feedback }}</div>
+                <div class="text-sm text-gray-600">Total Feedback</div>
+            </div>
+            <div class="text-center p-4 bg-yellow-50 rounded-lg">
+                <div class="text-2xl font-bold text-yellow-600">{{ "%.1f"|format(learning_stats.false_positive_rate) }}%</div>
+                <div class="text-sm text-gray-600">False Positive Rate</div>
+            </div>
+        </div>
+
+        {% if learning_stats.candidates %}
+        <div class="border-t border-gray-200 pt-4">
+            <h4 class="text-sm font-medium text-gray-700 mb-3">Domains Pending Auto-Whitelist (need 3 reports)</h4>
+            <div class="flex flex-wrap gap-2">
+                {% for domain, count in learning_stats.candidates %}
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-yellow-100 text-yellow-800">
+                    {{ domain }} <span class="ml-1 text-xs text-yellow-600">({{ count }}/3)</span>
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- URL Detonations -->
+{% if detonations %}
+<div class="bg-white rounded-lg shadow mt-8">
+    <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-gray-900">
+            <span class="mr-2">🔍</span>Recent URL Detonations
+        </h2>
+        <span class="text-sm text-gray-500">{{ detonations|length }} recent scans</span>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">URL</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Classification</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Score</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Risk Factors</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Evidence</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for det in detonations %}
+                <tr class="{% if det.classification == 'HIGH_RISK' %}bg-red-50{% elif det.classification == 'MEDIUM_RISK' %}bg-yellow-50{% endif %}">
+                    <td class="px-4 py-3 text-sm text-gray-900 max-w-xs truncate" title="{{ det.original_url }}">
+                        {{ det.original_url[:50] }}{% if det.original_url|length > 50 %}...{% endif %}
+                    </td>
+                    <td class="px-4 py-3">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                            {% if det.classification == 'HIGH_RISK' %}bg-red-100 text-red-800
+                            {% elif det.classification == 'MEDIUM_RISK' %}bg-yellow-100 text-yellow-800
+                            {% elif det.classification == 'LOW_RISK' %}bg-blue-100 text-blue-800
+                            {% else %}bg-green-100 text-green-800{% endif %}">
+                            {{ det.classification|replace('_', ' ') }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-sm font-medium
+                        {% if det.risk_score >= 70 %}text-red-600
+                        {% elif det.risk_score >= 40 %}text-yellow-600
+                        {% else %}text-gray-600{% endif %}">
+                        {{ det.risk_score }}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-600 max-w-xs">
+                        {% if det.risk_factors %}
+                            <ul class="list-disc list-inside">
+                            {% for factor in det.risk_factors[:3] %}
+                                <li class="truncate" title="{{ factor }}">{{ factor[:40] }}{% if factor|length > 40 %}...{% endif %}</li>
+                            {% endfor %}
+                            </ul>
+                        {% else %}
+                            <span class="text-gray-400">None detected</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-sm">
+                        {% if det.evidence %}
+                            {% if det.evidence.screenshot %}
+                            <a href="{{ det.evidence.screenshot }}" target="_blank" class="text-blue-600 hover:text-blue-800 mr-2" title="View Screenshot">
+                                📸
+                            </a>
+                            {% endif %}
+                            {% if det.evidence.report_url %}
+                            <a href="{{ det.evidence.report_url }}" target="_blank" class="text-blue-600 hover:text-blue-800" title="Full Report">
+                                📄 Report
+                            </a>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Volume chart
+const ctx = document.getElementById('volumeChart').getContext('2d');
+const dailyData = {{ stats.daily|tojson|safe }};
+
+new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: dailyData.map(d => d.date),
+        datasets: [
+            {
+                label: 'Total Checked',
+                data: dailyData.map(d => d.count),
+                backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                borderColor: 'rgb(59, 130, 246)',
+                borderWidth: 1
+            },
+            {
+                label: 'Phishing Detected',
+                data: dailyData.map(d => d.phishing),
+                backgroundColor: 'rgba(239, 68, 68, 0.5)',
+                borderColor: 'rgb(239, 68, 68)',
+                borderWidth: 1
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

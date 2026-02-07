@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp
+    xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+    xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
+    xsi:type="MailApp">
+
+    <!-- Basic add-in info -->
+    <Id>1138b5e8-f4e9-4697-9bc7-99e6b152a09f</Id>
+    <Version>1.0.0.0</Version>
+    <ProviderName>Forzon Security</ProviderName>
+    <DefaultLocale>en-US</DefaultLocale>
+    <DisplayName DefaultValue="PhishCheck" />
+    <Description DefaultValue="Check if an email is phishing. Get instant verdicts with explanations." />
+    <IconUrl DefaultValue="https://phishcheck.forzon.ca/static/icon-64.png" />
+    <HighResolutionIconUrl DefaultValue="https://phishcheck.forzon.ca/static/icon-128.png" />
+
+    <!-- Support URL -->
+    <SupportUrl DefaultValue="https://phishcheck.forzon.ca/help" />
+
+    <!-- Domains that will be allowed to access the add-in -->
+    <AppDomains>
+        <AppDomain>https://phishcheck.forzon.ca</AppDomain>
+    </AppDomains>
+
+    <!-- Host requirements -->
+    <Hosts>
+        <Host Name="Mailbox" />
+    </Hosts>
+
+    <!-- API requirements -->
+    <Requirements>
+        <Sets>
+            <Set Name="Mailbox" MinVersion="1.1" />
+        </Sets>
+    </Requirements>
+
+    <!-- Define add-in behavior -->
+    <FormSettings>
+        <Form xsi:type="ItemRead">
+            <DesktopSettings>
+                <SourceLocation DefaultValue="https://phishcheck.forzon.ca/addon/taskpane.html" />
+                <RequestedHeight>450</RequestedHeight>
+            </DesktopSettings>
+        </Form>
+    </FormSettings>
+
+    <!-- Permissions -->
+    <Permissions>ReadItem</Permissions>
+
+    <!-- Rule for when add-in is available -->
+    <Rule xsi:type="RuleCollection" Mode="Or">
+        <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read" />
+    </Rule>
+
+    <!-- Version overrides for ribbon button -->
+    <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
+        <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
+
+            <!-- Hosts -->
+            <Hosts>
+                <Host xsi:type="MailHost">
+                    <DesktopFormFactor>
+
+                        <!-- Function file for commands -->
+                        <FunctionFile resid="functionFile" />
+
+                        <!-- Message read form -->
+                        <ExtensionPoint xsi:type="MessageReadCommandSurface">
+                            <OfficeTab id="TabDefault">
+                                <Group id="msgReadGroup">
+                                    <Label resid="groupLabel" />
+
+                                    <!-- Main button -->
+                                    <Control xsi:type="Button" id="checkPhishingBtn">
+                                        <Label resid="btnLabel" />
+                                        <Supertip>
+                                            <Title resid="btnLabel" />
+                                            <Description resid="btnDesc" />
+                                        </Supertip>
+                                        <Icon>
+                                            <bt:Image size="16" resid="icon16" />
+                                            <bt:Image size="32" resid="icon32" />
+                                            <bt:Image size="80" resid="icon80" />
+                                        </Icon>
+                                        <Action xsi:type="ShowTaskpane">
+                                            <SourceLocation resid="taskpaneUrl" />
+                                        </Action>
+                                    </Control>
+
+                                </Group>
+                            </OfficeTab>
+                        </ExtensionPoint>
+
+                    </DesktopFormFactor>
+                </Host>
+            </Hosts>
+
+            <!-- Resources -->
+            <Resources>
+                <bt:Images>
+                    <bt:Image id="icon16" DefaultValue="https://phishcheck.forzon.ca/static/icon-16.png" />
+                    <bt:Image id="icon32" DefaultValue="https://phishcheck.forzon.ca/static/icon-32.png" />
+                    <bt:Image id="icon80" DefaultValue="https://phishcheck.forzon.ca/static/icon-80.png" />
+                </bt:Images>
+
+                <bt:Urls>
+                    <bt:Url id="taskpaneUrl" DefaultValue="https://phishcheck.forzon.ca/addon/taskpane.html" />
+                    <bt:Url id="functionFile" DefaultValue="https://phishcheck.forzon.ca/addon/functions.html" />
+                </bt:Urls>
+
+                <bt:ShortStrings>
+                    <bt:String id="groupLabel" DefaultValue="PhishCheck" />
+                    <bt:String id="btnLabel" DefaultValue="Is This Phishing?" />
+                </bt:ShortStrings>
+
+                <bt:LongStrings>
+                    <bt:String id="btnDesc" DefaultValue="Check if this email is a phishing attempt. Get an instant verdict with explanation." />
+                </bt:LongStrings>
+
+            </Resources>
+
+        </VersionOverrides>
+    </VersionOverrides>
+
+</OfficeApp>

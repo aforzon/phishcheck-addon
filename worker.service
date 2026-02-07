@@ -1,0 +1,21 @@
+# PhishCheck Email Worker Service
+# Copy to: /etc/systemd/system/phishcheck-worker.service
+# Then: systemctl daemon-reload
+# Then: systemctl enable phishcheck-worker
+# Then: systemctl start phishcheck-worker
+
+[Unit]
+Description=PhishCheck Email Worker - Polls inbox for forwarded emails
+After=network.target
+
+[Service]
+Type=simple
+User=aforzon
+Group=aforzon
+WorkingDirectory=/var/www/phishcheck
+ExecStart=/usr/bin/python3 worker.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}Accuracy - PhishCheck{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">Accuracy & Feedback</h1>
+    <p class="text-gray-600">Verdict accuracy and user feedback management</p>
+</div>
+
+<!-- Accuracy Stats -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-sm font-medium text-gray-500 uppercase">Total Feedback</h3>
+        <div class="mt-2 text-3xl font-bold text-gray-900">{{ stats.total }}</div>
+        <p class="text-sm text-gray-500 mt-1">Last 30 days</p>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-sm font-medium text-gray-500 uppercase">Phishing Accuracy</h3>
+        <div class="mt-2 text-3xl font-bold text-red-600">{{ "%.1f"|format(stats.phishing_accuracy) }}%</div>
+        <p class="text-sm text-gray-500 mt-1">{{ stats.phishing_correct }}/{{ stats.phishing_total }} confirmed</p>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-sm font-medium text-gray-500 uppercase">Suspicious Accuracy</h3>
+        <div class="mt-2 text-3xl font-bold text-yellow-600">{{ "%.1f"|format(stats.suspicious_accuracy) }}%</div>
+        <p class="text-sm text-gray-500 mt-1">{{ stats.suspicious_correct }}/{{ stats.suspicious_total }} confirmed</p>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-sm font-medium text-gray-500 uppercase">Safe Accuracy</h3>
+        <div class="mt-2 text-3xl font-bold text-green-600">{{ "%.1f"|format(stats.safe_accuracy) }}%</div>
+        <p class="text-sm text-gray-500 mt-1">{{ stats.safe_correct }}/{{ stats.safe_total }} confirmed</p>
+    </div>
+</div>
+
+<!-- Pending Reviews -->
+<div class="bg-white rounded-lg shadow mb-8">
+    <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+        <h2 class="text-lg font-semibold text-gray-900">Pending Reviews</h2>
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+            {{ pending|length }} pending
+        </span>
+    </div>
+
+    {% if pending %}
+    <div class="divide-y divide-gray-200">
+        {% for item in pending[:10] %}
+        <div class="p-4 hover:bg-gray-50">
+            <div class="flex justify-between items-start">
+                <div class="flex-1">
+                    <div class="flex items-center space-x-2">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                            {% if item.original_verdict == 'phishing' %}bg-red-100 text-red-800
+                            {% elif item.original_verdict == 'suspicious' %}bg-yellow-100 text-yellow-800
+                            {% else %}bg-green-100 text-green-800{% endif %}">
+                            {{ item.original_verdict|upper }}
+                        </span>
+                        <span class="text-gray-400">&rarr;</span>
+                        <span class="text-sm text-gray-600">User says: {{ item.user_says }}</span>
+                    </div>
+                    <p class="mt-1 text-sm text-gray-900">{{ item.subject or 'No subject' }}</p>
+                    <p class="mt-1 text-xs text-gray-500">
+                        From: {{ item.original_sender or 'Unknown' }} |
+                        Confidence: {{ item.confidence }}%
+                    </p>
+                    {% if item.reason %}
+                    <p class="mt-2 text-sm text-gray-600">
+                        <span class="font-medium">Reason:</span> {{ item.reason }}
+                    </p>
+                    {% endif %}
+                </div>
+                <div class="ml-4 flex space-x-2">
+                    <button onclick="addToWhitelist('{{ item.original_sender }}')"
+                            class="px-3 py-1 text-sm text-green-600 border border-green-300 rounded hover:bg-green-50">
+                        Whitelist
+                    </button>
+                    <button onclick="dismissFeedback('{{ item.id }}')"
+                            class="px-3 py-1 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-50">
+                        Dismiss
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="p-8 text-center text-gray-500">
+        No pending reviews
+    </div>
+    {% endif %}
+</div>
+
+<!-- Whitelist & Blacklist -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Whitelist -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-gray-900">Whitelist</h2>
+            <button onclick="showAddModal('whitelist')"
+                    class="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                + Add
+            </button>
+        </div>
+        <div class="max-h-80 overflow-y-auto">
+            {% if whitelist %}
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
+                        <th class="px-4 py-2"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for item in whitelist %}
+                    <tr>
+                        <td class="px-4 py-2 text-sm text-gray-500">{{ item.type }}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 font-mono">{{ item.value }}</td>
+                        <td class="px-4 py-2 text-sm text-gray-500">{{ item.reason|truncate(30) }}</td>
+                        <td class="px-4 py-2 text-right">
+                            <button onclick="removeFromList('whitelist', '{{ item.id }}')"
+                                    class="text-red-600 hover:text-red-800 text-sm">Remove</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="p-8 text-center text-gray-500">
+                No whitelisted entries
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Blacklist -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-gray-900">Blacklist</h2>
+            <button onclick="showAddModal('blacklist')"
+                    class="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                + Add
+            </button>
+        </div>
+        <div class="max-h-80 overflow-y-auto">
+            {% if blacklist %}
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
+                        <th class="px-4 py-2"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for item in blacklist %}
+                    <tr>
+                        <td class="px-4 py-2 text-sm text-gray-500">{{ item.type }}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 font-mono">{{ item.value }}</td>
+                        <td class="px-4 py-2 text-sm text-gray-500">{{ item.reason|truncate(30) }}</td>
+                        <td class="px-4 py-2 text-right">
+                            <button onclick="removeFromList('blacklist', '{{ item.id }}')"
+                                    class="text-red-600 hover:text-red-800 text-sm">Remove</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="p-8 text-center text-gray-500">
+                No blacklisted entries
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Add Modal -->
+<div id="addModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div class="p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Add to <span id="listType">Whitelist</span></h3>
+            <form id="addForm" onsubmit="submitAdd(event)">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                    <select name="type" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        <option value="domain">Domain</option>
+                        <option value="sender">Sender Email</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Value</label>
+                    <input type="text" name="value" required
+                           placeholder="example.com or sender@example.com"
+                           class="w-full border border-gray-300 rounded-md px-3 py-2">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+                    <input type="text" name="reason"
+                           placeholder="Optional reason"
+                           class="w-full border border-gray-300 rounded-md px-3 py-2">
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="closeAddModal()"
+                            class="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                        Add
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentList = 'whitelist';
+
+function showAddModal(list) {
+    currentList = list;
+    document.getElementById('listType').textContent = list.charAt(0).toUpperCase() + list.slice(1);
+    document.getElementById('addModal').classList.remove('hidden');
+    document.getElementById('addModal').classList.add('flex');
+}
+
+function closeAddModal() {
+    document.getElementById('addModal').classList.add('hidden');
+    document.getElementById('addModal').classList.remove('flex');
+    document.getElementById('addForm').reset();
+}
+
+function submitAdd(e) {
+    e.preventDefault();
+    const form = e.target;
+    const data = {
+        type: form.type.value,
+        value: form.value.value,
+        reason: form.reason.value
+    };
+
+    fetch(`/api/${currentList}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    }).then(r => r.json()).then(data => {
+        closeAddModal();
+        location.reload();
+    });
+}
+
+function removeFromList(list, id) {
+    if (confirm('Remove this entry?')) {
+        fetch(`/api/${list}/${id}`, {method: 'DELETE'})
+            .then(r => r.json())
+            .then(data => location.reload());
+    }
+}
+
+function addToWhitelist(sender) {
+    if (!sender) return;
+    const domain = sender.split('@')[1];
+    if (confirm(`Add ${domain} to whitelist?`)) {
+        fetch('/api/whitelist', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({type: 'domain', value: domain, reason: 'Confirmed false positive'})
+        }).then(r => r.json()).then(data => location.reload());
+    }
+}
+
+function dismissFeedback(id) {
+    // In production, this would update the feedback status
+    alert('Feedback dismissed');
+}
+
+// Close modal on background click
+document.getElementById('addModal').addEventListener('click', function(e) {
+    if (e.target === this) closeAddModal();
+});
+</script>
+{% endblock %}

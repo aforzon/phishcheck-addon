@@ -1,0 +1,21 @@
+# PhishCheck Systemd Service
+# Copy to: /etc/systemd/system/phishcheck.service
+# Then: systemctl daemon-reload
+# Then: systemctl enable phishcheck
+# Then: systemctl start phishcheck
+
+[Unit]
+Description=PhishCheck - Internal Phishing Detection Tool
+After=network.target
+
+[Service]
+Type=simple
+User=aforzon
+Group=aforzon
+WorkingDirectory=/var/www/phishcheck
+ExecStart=/usr/bin/python3 -m gunicorn -w 2 -b 127.0.0.1:11000 app:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
