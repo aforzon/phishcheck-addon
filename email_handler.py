@@ -26,24 +26,42 @@ import config
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
 
 
+ALLOWED_IMAGE_HOSTS = ('urlscan.io',)
+
+
 def fetch_image_bytes(url, timeout=10):
     """Download image and return raw bytes for CID attachment."""
     try:
-        response = requests.get(url, timeout=timeout, stream=True)
-        if response.status_code == 200:
-            content_length = response.headers.get('Content-Length')
-            if content_length and int(content_length) > MAX_IMAGE_SIZE:
-                logging.getLogger(__name__).warning(f'Image too large ({content_length} bytes): {url}')
+        # SSRF protection: only allow known screenshot hosts
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        if not any(parsed.netloc.endswith(host) for host in ALLOWED_IMAGE_HOSTS):
+            logging.getLogger(__name__).warning(f'Blocked image fetch from untrusted host: {parsed.netloc}')
+            return None
+
+        response = requests.get(url, timeout=timeout, stream=True, allow_redirects=False)
+        if response.status_code != 200:
+            return None
+
+        # Verify Content-Type is an image
+        content_type = response.headers.get('Content-Type', '')
+        if not content_type.startswith('image/'):
+            logging.getLogger(__name__).warning(f'Non-image Content-Type ({content_type}): {url}')
+            return None
+
+        content_length = response.headers.get('Content-Length')
+        if content_length and int(content_length) > MAX_IMAGE_SIZE:
+            logging.getLogger(__name__).warning(f'Image too large ({content_length} bytes): {url}')
+            return None
+        chunks = []
+        total = 0
+        for chunk in response.iter_content(8192):
+            total += len(chunk)
+            if total > MAX_IMAGE_SIZE:
+                logging.getLogger(__name__).warning(f'Image exceeded {MAX_IMAGE_SIZE} bytes: {url}')
                 return None
-            chunks = []
-            total = 0
-            for chunk in response.iter_content(8192):
-                total += len(chunk)
-                if total > MAX_IMAGE_SIZE:
-                    logging.getLogger(__name__).warning(f'Image exceeded {MAX_IMAGE_SIZE} bytes: {url}')
-                    return None
-                chunks.append(chunk)
-            return b''.join(chunks)
+            chunks.append(chunk)
+        return b''.join(chunks)
     except Exception as e:
         logging.getLogger(__name__).warning(f'Failed to fetch image {url}: {e}')
     return None
@@ -86,6 +104,8 @@ class EmailHandler:
 
             for msg_id in message_ids[0].split():
                 _, msg_data = imap.fetch(msg_id, '(RFC822)')
+                if not msg_data or not isinstance(msg_data[0], tuple):
+                    continue
                 raw_email = msg_data[0][1]
                 msg = email.message_from_bytes(raw_email)
 
@@ -174,13 +194,15 @@ class EmailHandler:
                         eml_msg = payload
                     break
                 elif content_type == 'text/html':
-                    payload = part.get_payload(decode=True)
-                    if payload:
-                        body_html = payload.decode('utf-8', errors='ignore')
+                    if not body_html:  # Prefer first HTML part
+                        payload = part.get_payload(decode=True)
+                        if payload:
+                            body_html = payload.decode('utf-8', errors='ignore')
                 elif content_type == 'text/plain':
-                    payload = part.get_payload(decode=True)
-                    if payload:
-                        body_text = payload.decode('utf-8', errors='ignore')
+                    if not body_text:  # Prefer first text part
+                        payload = part.get_payload(decode=True)
+                        if payload:
+                            body_text = payload.decode('utf-8', errors='ignore')
         else:
             payload = msg.get_payload(decode=True)
             if payload:
@@ -578,7 +600,7 @@ PhishCheck - Submission ID: {submission_id}
             else:
                 msg.attach(MIMEText(html, 'html'))
 
-            with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
+            with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=30) as server:
                 server.starttls()
                 server.login(self.email_user, self.email_pass)
                 server.sendmail(self.email_user, to_email, msg.as_string())

@@ -180,7 +180,9 @@ class GraphClient:
     def get_department_user_count(self, department):
         """Get count of users in a specific department."""
         try:
-            endpoint = f"/users?$filter=department eq '{department}'&$count=true"
+            # Escape single quotes for OData filter (OData uses '' to escape ')
+            safe_dept = department.replace("'", "''")
+            endpoint = f"/users?$filter=department eq '{safe_dept}'&$count=true"
             headers = {'ConsistencyLevel': 'eventual'}
             response = self._request('GET', endpoint, headers=headers)
 

@@ -345,6 +345,104 @@ class TestDashboardPages:
 # Addon Serving
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# API: Feedback Validation
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestApiFeedbackValidation:
+    def _create_submission(self, client):
+        with patch('app.get_graph_client', return_value=None):
+            resp = client.post('/api/check', json={
+                'sender': 'test@example.com',
+                'subject': 'Test',
+                'headers': '',
+                'body_html': ''
+            })
+            return resp.get_json()['submission_id']
+
+    def test_feedback_missing_json(self, client):
+        sid = self._create_submission(client)
+        resp = client.post(f'/api/feedback/{sid}', content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_feedback_invalid_user_says(self, client):
+        sid = self._create_submission(client)
+        resp = client.post(f'/api/feedback/{sid}', json={
+            'user_email': 'u@t.com',
+            'user_says': 'invalid_value'
+        })
+        assert resp.status_code == 400
+
+    def test_feedback_error_no_leak(self, client):
+        """Error responses should not leak internal exception details."""
+        resp = client.post('/api/feedback/nonexistent', json={
+            'user_email': 'u@t.com',
+            'user_says': 'correct'
+        })
+        assert resp.status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Whitelist/Blacklist Validation
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestWhitelistBlacklistValidation:
+    def test_whitelist_missing_value(self, auth_client):
+        resp = auth_client.post('/api/whitelist', json={
+            'type': 'domain',
+            'reason': 'Test'
+        })
+        assert resp.status_code == 400
+
+    def test_blacklist_missing_value(self, auth_client):
+        resp = auth_client.post('/api/blacklist', json={
+            'type': 'domain',
+            'reason': 'Test'
+        })
+        assert resp.status_code == 400
+
+    def test_whitelist_empty_value(self, auth_client):
+        resp = auth_client.post('/api/whitelist', json={
+            'type': 'domain',
+            'value': '',
+            'reason': 'Test'
+        })
+        assert resp.status_code == 400
+
+    def test_whitelist_no_json(self, auth_client):
+        resp = auth_client.post('/api/whitelist', content_type='application/json')
+        assert resp.status_code == 400
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Stats Bounds
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestStatsBounds:
+    def test_stats_negative_days_clamped(self, auth_client):
+        resp = auth_client.get('/api/stats?days=-5')
+        assert resp.status_code == 200
+
+    def test_stats_huge_days_clamped(self, auth_client):
+        resp = auth_client.get('/api/stats?days=999999')
+        assert resp.status_code == 200
+
+    def test_check_error_no_leak(self, client):
+        """API /api/check error should return generic message, not exception details."""
+        with patch('app.analyze_email', side_effect=RuntimeError('secret db path /etc/db')):
+            resp = client.post('/api/check', json={
+                'sender': 'test@example.com'
+            })
+            assert resp.status_code == 500
+            error_msg = resp.get_json()['error']
+            assert 'secret' not in error_msg
+            assert 'Internal server error' in error_msg
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Addon Serving
+# ═══════════════════════════════════════════════════════════════════════════════
+
 class TestAddonServing:
     def test_serve_manifest(self, client):
         resp = client.get('/addon/manifest.xml')

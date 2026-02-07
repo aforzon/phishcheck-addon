@@ -199,7 +199,11 @@ def find_or_create_campaign(fingerprint, sender_domain, subject):
                     user_count = user_count + 1 WHERE id = ?
             ''', (existing['id'],))
             conn.commit()
-            return dict(existing), False
+            # Re-fetch to get the updated user_count
+            updated = conn.execute(
+                'SELECT * FROM campaigns WHERE id = ?', (existing['id'],)
+            ).fetchone()
+            return dict(updated), False
 
         # Create new campaign
         campaign_id = str(uuid.uuid4())
@@ -317,11 +321,19 @@ def get_pending_feedback():
 # Whitelist/Blacklist functions
 def add_to_whitelist(type_, value, reason, added_by):
     entry_id = str(uuid.uuid4())
+    value_lower = value.lower()
     with get_db() as conn:
+        # Check for existing duplicate
+        existing = conn.execute(
+            'SELECT id FROM whitelist WHERE type = ? AND value = ?',
+            (type_, value_lower)
+        ).fetchone()
+        if existing:
+            return existing['id']
         conn.execute('''
             INSERT INTO whitelist (id, type, value, reason, added_by)
             VALUES (?, ?, ?, ?, ?)
-        ''', (entry_id, type_, value.lower(), reason, added_by))
+        ''', (entry_id, type_, value_lower, reason, added_by))
         conn.commit()
     return entry_id
 
@@ -344,11 +356,19 @@ def is_whitelisted(sender, domain):
 
 def add_to_blacklist(type_, value, reason, added_by):
     entry_id = str(uuid.uuid4())
+    value_lower = value.lower()
     with get_db() as conn:
+        # Check for existing duplicate
+        existing = conn.execute(
+            'SELECT id FROM blacklist WHERE type = ? AND value = ?',
+            (type_, value_lower)
+        ).fetchone()
+        if existing:
+            return existing['id']
         conn.execute('''
             INSERT INTO blacklist (id, type, value, reason, added_by)
             VALUES (?, ?, ?, ?, ?)
-        ''', (entry_id, type_, value.lower(), reason, added_by))
+        ''', (entry_id, type_, value_lower, reason, added_by))
         conn.commit()
     return entry_id
 
@@ -427,14 +447,15 @@ def check_auto_whitelist(domain, threshold=None):
         if existing:
             return False
 
-        # Count confirmed false positives for this domain
-        # (user said "false_positive" and verdict was phishing/suspicious)
+        # Count SOC-reviewed false positives for this domain
+        # Only confirmed reviews count — unreviewed feedback cannot trigger auto-whitelist
         fp_count = conn.execute('''
             SELECT COUNT(DISTINCT f.id) FROM feedback f
             JOIN submissions s ON f.submission_id = s.id
             WHERE s.sender_domain = ?
             AND f.user_says = 'false_positive'
             AND f.original_verdict IN ('phishing', 'suspicious')
+            AND f.review_status = 'confirmed'
         ''', (domain,)).fetchone()[0]
 
         if fp_count >= threshold:

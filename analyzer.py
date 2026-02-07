@@ -9,6 +9,7 @@ import re
 import hashlib
 import dns.resolver
 from datetime import datetime, timedelta
+from functools import lru_cache
 from urllib.parse import urlparse
 import logging
 
@@ -16,6 +17,22 @@ import config
 from models import is_whitelisted, is_blacklisted
 
 logger = logging.getLogger(__name__)
+
+
+# DNS result cache — avoids redundant lookups for the same domain
+# maxsize=256 keeps the most recent 256 domains; cleared on process restart
+@lru_cache(maxsize=256)
+def _dns_resolve(domain, rdtype):
+    """Cached DNS resolution. Returns list of record strings, or None on failure."""
+    try:
+        answers = dns.resolver.resolve(domain, rdtype)
+        return [str(r) for r in answers]
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
+            dns.resolver.NoNameservers, dns.resolver.Timeout):
+        return None
+    except Exception:
+        return None
+
 
 # Optional URL detonation
 try:
@@ -134,8 +151,6 @@ class EmailAnalyzer:
         signals = []
         if not headers:
             return signals
-
-        headers_lower = headers.lower()
 
         # Check Authentication-Results for SPF/DKIM/DMARC
         auth_results = self._find_header(headers, 'Authentication-Results')
@@ -518,19 +533,19 @@ class EmailAnalyzer:
 
     def _check_domain_age(self, domain):
         """
-        Check domain age via DNS.
+        Check domain patterns and resolvability via DNS.
 
         Note: Full WHOIS lookup would be more accurate but requires external API.
-        This is a simplified check based on DNS record existence patterns.
+        This is a simplified check based on DNS record existence and name patterns.
         """
-        # For MVP, we'll skip actual WHOIS and just check DNS
-        # In production, integrate with WHOIS API service
-        try:
-            # Try to resolve the domain
-            dns.resolver.resolve(domain, 'A')
+        if not domain:
+            return None
 
-            # For demo purposes, flag certain patterns as potentially new
-            # In production, use actual WHOIS data
+        # Use cached DNS resolution
+        a_records = _dns_resolve(domain, 'A')
+
+        if a_records is not None:
+            # Domain resolves — check for suspicious name patterns
             suspicious_patterns = [
                 r'\d{4,}',  # Contains 4+ digits
                 r'-[a-z]{2,}-',  # Multiple hyphenated segments
@@ -546,22 +561,19 @@ class EmailAnalyzer:
                     }
 
             return None
-
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.Timeout):
+        else:
             # Domain doesn't exist or can't be resolved
             return {
                 'name': 'domain_age_7',
                 'description': 'Domain cannot be resolved (may be very new or fake)',
                 'weight': self.weights['domain_age_7']
             }
-        except Exception as e:
-            logger.warning(f'DNS check failed for {domain}: {e}')
-            return None
 
     def _check_dns_records(self, domain):
         """
         Check DNS records for the sender domain.
         Missing MX, SPF, or DMARC records can indicate phishing domains.
+        Uses cached DNS resolution to avoid redundant lookups.
         """
         signals = []
 
@@ -577,62 +589,42 @@ class EmailAnalyzer:
         if domain.lower() in freemail_domains:
             return signals
 
-        try:
-            # Check MX records
-            try:
-                mx_records = dns.resolver.resolve(domain, 'MX')
-                has_mx = len(list(mx_records)) > 0
-            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers):
-                has_mx = False
-            except Exception:
-                has_mx = True  # Assume exists on error
+        # Check MX records (cached)
+        mx_records = _dns_resolve(domain, 'MX')
+        has_mx = mx_records is not None and len(mx_records) > 0
 
-            if not has_mx:
-                signals.append({
-                    'name': 'no_mx_record',
-                    'description': f'Domain {domain} has no MX records (cannot receive email)',
-                    'weight': self.weights.get('no_mx_record', 15)
-                })
+        if not has_mx:
+            signals.append({
+                'name': 'no_mx_record',
+                'description': f'Domain {domain} has no MX records (cannot receive email)',
+                'weight': self.weights.get('no_mx_record', 15)
+            })
 
-            # Check SPF record
-            try:
-                txt_records = dns.resolver.resolve(domain, 'TXT')
-                has_spf = any('v=spf1' in str(r).lower() for r in txt_records)
-            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers):
-                has_spf = False
-            except Exception:
-                has_spf = True  # Assume exists on error
+        # Check SPF record (cached)
+        txt_records = _dns_resolve(domain, 'TXT')
+        has_spf = txt_records is not None and any('v=spf1' in r.lower() for r in txt_records)
 
-            if not has_spf:
-                signals.append({
-                    'name': 'no_spf_record',
-                    'description': f'Domain {domain} has no SPF record (email authentication not configured)',
-                    'weight': self.weights.get('no_spf_record', 10)
-                })
+        if not has_spf:
+            signals.append({
+                'name': 'no_spf_record',
+                'description': f'Domain {domain} has no SPF record (email authentication not configured)',
+                'weight': self.weights.get('no_spf_record', 10)
+            })
 
-            # Check DMARC record
-            try:
-                dmarc_domain = f'_dmarc.{domain}'
-                dmarc_records = dns.resolver.resolve(dmarc_domain, 'TXT')
-                has_dmarc = any('v=dmarc1' in str(r).lower() for r in dmarc_records)
-            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers):
-                has_dmarc = False
-            except Exception:
-                has_dmarc = True  # Assume exists on error
+        # Check DMARC record (cached)
+        dmarc_domain = f'_dmarc.{domain}'
+        dmarc_records = _dns_resolve(dmarc_domain, 'TXT')
+        has_dmarc = dmarc_records is not None and any('v=dmarc1' in r.lower() for r in dmarc_records)
 
-            if not has_dmarc:
-                signals.append({
-                    'name': 'no_dmarc_record',
-                    'description': f'Domain {domain} has no DMARC record (email policy not configured)',
-                    'weight': self.weights.get('no_dmarc_record', 5)
-                })
+        if not has_dmarc:
+            signals.append({
+                'name': 'no_dmarc_record',
+                'description': f'Domain {domain} has no DMARC record (email policy not configured)',
+                'weight': self.weights.get('no_dmarc_record', 5)
+            })
 
-            # Log summary
-            if signals:
-                logger.info(f'DNS checks for {domain}: MX={has_mx}, SPF={has_spf}, DMARC={has_dmarc}')
-
-        except Exception as e:
-            logger.warning(f'DNS record check failed for {domain}: {e}')
+        if signals:
+            logger.info(f'DNS checks for {domain}: MX={has_mx}, SPF={has_spf}, DMARC={has_dmarc}')
 
         return signals
 
@@ -849,7 +841,7 @@ class EmailAnalyzer:
 
     def _check_suspicious_attachments(self, headers, body_html):
         """
-        Check for suspicious attachment types.
+        Check for suspicious attachment types in headers only.
         """
         dangerous_extensions = [
             '.exe', '.scr', '.bat', '.cmd', '.com', '.pif',  # Executables
@@ -857,15 +849,13 @@ class EmailAnalyzer:
             '.msi', '.msp', '.hta', '.cpl',                   # Installers
             '.jar', '.ps1', '.psm1',                          # Java/PowerShell
             '.iso', '.img',                                    # Disk images
-            '.html', '.htm', '.shtml',                         # HTML (often phishing)
         ]
 
-        # Check Content-Disposition headers
-        content = (headers or '') + (body_html or '')
-        content_lower = content.lower()
+        # Only search headers for Content-Disposition / filename patterns
+        # Searching body_html causes false positives on URLs/text mentioning filenames
+        headers_lower = (headers or '').lower()
 
-        # Look for filename= in headers or body
-        filename_matches = re.findall(r'filename["\s]*=[\s"\']*([^"\'\s;>]+)', content_lower)
+        filename_matches = re.findall(r'filename["\s]*=[\s"\']*([^"\'\s;>]+)', headers_lower)
 
         for filename in filename_matches:
             for ext in dangerous_extensions:
@@ -876,8 +866,10 @@ class EmailAnalyzer:
                         'weight': self.weights.get('suspicious_attachment', 20)
                     }
 
-        # Also check for .zip with password hint (common malware delivery)
-        if '.zip' in content_lower and ('password' in content_lower or 'pwd:' in content_lower):
+        # Check for .zip with password hint in body (common malware delivery)
+        combined_lower = headers_lower + (body_html or '').lower()
+        has_zip_attachment = re.search(r'filename["\s]*=[\s"\']*[^"\'\s;>]*\.zip', headers_lower)
+        if has_zip_attachment and ('password' in combined_lower or 'pwd:' in combined_lower):
             return {
                 'name': 'suspicious_attachment',
                 'description': 'Password-protected ZIP attachment (common malware delivery)',

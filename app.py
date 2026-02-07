@@ -298,7 +298,7 @@ def api_check():
 
     except Exception as e:
         logger.exception('Error in /api/check')
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/feedback/<submission_id>', methods=['POST'])
@@ -315,24 +315,31 @@ def api_feedback(submission_id):
     }
     """
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True)
+
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
 
         submission = get_submission(submission_id)
         if not submission:
             return jsonify({'error': 'Submission not found'}), 404
 
+        user_says = data.get('user_says', 'correct')
+        if user_says not in ('correct', 'false_positive', 'false_negative'):
+            return jsonify({'error': 'Invalid user_says value'}), 400
+
         feedback_id = create_feedback(
             submission_id=submission_id,
             user_email=data.get('user_email', ''),
             original_verdict=submission['verdict'],
-            user_says=data.get('user_says', 'correct'),
+            user_says=user_says,
             reason=data.get('reason'),
             notes=data.get('notes')
         )
 
         # Check for auto-whitelist if this was a false positive
         auto_whitelisted = False
-        if data.get('user_says') == 'false_positive' and submission.get('sender_domain'):
+        if user_says == 'false_positive' and submission.get('sender_domain'):
             auto_whitelisted = check_auto_whitelist(submission['sender_domain'])
 
         return jsonify({
@@ -343,7 +350,7 @@ def api_feedback(submission_id):
 
     except Exception as e:
         logger.exception('Error in feedback')
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/feedback/<submission_id>')
@@ -397,7 +404,9 @@ def feedback_submit(submission_id):
 @login_required
 def api_add_whitelist():
     """Add to whitelist."""
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not data or not data.get('value'):
+        return jsonify({'error': 'value is required'}), 400
     entry_id = add_to_whitelist(
         type_=data.get('type', 'domain'),
         value=data.get('value'),
@@ -419,7 +428,9 @@ def api_remove_whitelist(entry_id):
 @login_required
 def api_add_blacklist():
     """Add to blacklist."""
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not data or not data.get('value'):
+        return jsonify({'error': 'value is required'}), 400
     entry_id = add_to_blacklist(
         type_=data.get('type', 'domain'),
         value=data.get('value'),
@@ -445,7 +456,7 @@ def api_remove_blacklist(entry_id):
 @login_required
 def api_stats():
     """Get stats for dashboard charts."""
-    days = request.args.get('days', 30, type=int)
+    days = max(1, min(request.args.get('days', 30, type=int), 365))
     stats = get_submission_stats(days=days)
     return jsonify(stats)
 
@@ -495,7 +506,7 @@ def api_detonate_url():
         return jsonify(result)
     except Exception as e:
         logger.error(f"URL detonation failed: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'URL detonation failed'}), 500
 
 
 @app.route('/api/detonations')

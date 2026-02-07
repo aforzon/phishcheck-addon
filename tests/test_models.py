@@ -162,12 +162,13 @@ class TestCampaigns:
         from models import find_or_create_campaign
 
         campaign1, _ = find_or_create_campaign('fingerprint1', 'evil.com', 'Verify')
-        campaign2, is_new = find_or_create_campaign('fingerprint1', 'evil.com', 'Verify')
+        assert campaign1['user_count'] == 1
 
+        campaign2, is_new = find_or_create_campaign('fingerprint1', 'evil.com', 'Verify')
         assert is_new is False
         assert campaign2['id'] == campaign1['id']
-        # Note: campaign2 returns the old count because it reads before updating
-        # The actual count in DB is incremented
+        # Should return the updated count (not stale)
+        assert campaign2['user_count'] == 2
 
     def test_different_fingerprint_creates_new(self, tmp_db):
         from models import find_or_create_campaign
@@ -298,6 +299,25 @@ class TestWhitelistBlacklist:
         wl = get_whitelist()
         assert len(wl) == 2
 
+    def test_whitelist_no_duplicates(self, tmp_db):
+        from models import add_to_whitelist, get_whitelist
+        id1 = add_to_whitelist('domain', 'dup.com', 'First', 'admin')
+        id2 = add_to_whitelist('domain', 'dup.com', 'Second', 'admin')
+        # Should return existing ID, not create duplicate
+        assert id1 == id2
+        wl = get_whitelist()
+        dup_entries = [e for e in wl if e['value'] == 'dup.com']
+        assert len(dup_entries) == 1
+
+    def test_blacklist_no_duplicates(self, tmp_db):
+        from models import add_to_blacklist, get_blacklist
+        id1 = add_to_blacklist('domain', 'dup-evil.com', 'First', 'admin')
+        id2 = add_to_blacklist('domain', 'dup-evil.com', 'Second', 'admin')
+        assert id1 == id2
+        bl = get_blacklist()
+        dup_entries = [e for e in bl if e['value'] == 'dup-evil.com']
+        assert len(dup_entries) == 1
+
     def test_null_sender_no_crash(self, tmp_db):
         from models import is_whitelisted, is_blacklisted
         # Should not raise AttributeError
@@ -315,13 +335,14 @@ class TestWhitelistBlacklist:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestAutoWhitelist:
-    def test_auto_whitelist_after_threshold(self, tmp_db):
+    def test_auto_whitelist_requires_soc_review(self, tmp_db):
+        """Auto-whitelist should only count SOC-confirmed feedback."""
         from models import (
             create_submission, create_feedback,
             check_auto_whitelist, is_whitelisted
         )
 
-        # Create 3 submissions from the same domain, each with false positive feedback
+        # Create 3 false positive feedbacks (all unreviewed / pending)
         for i in range(3):
             sid = create_submission(
                 fingerprint=f'fp{i}', submitted_by=f'user{i}@test.com',
@@ -332,6 +353,37 @@ class TestAutoWhitelist:
                 verdict='phishing', confidence=75, signals=[]
             )
             create_feedback(sid, f'user{i}@test.com', 'phishing', 'false_positive')
+
+        # Should NOT auto-whitelist because feedback is still pending review
+        result = check_auto_whitelist('legit-vendor.com', threshold=3)
+        assert result is False
+        assert is_whitelisted('someone@legit-vendor.com', 'legit-vendor.com') is False
+
+    def test_auto_whitelist_after_soc_confirmed(self, tmp_db):
+        """Auto-whitelist should trigger when SOC confirms the false positives."""
+        from models import (
+            create_submission, create_feedback,
+            check_auto_whitelist, is_whitelisted, get_db
+        )
+
+        # Create 3 false positive feedbacks and confirm them via SOC
+        for i in range(3):
+            sid = create_submission(
+                fingerprint=f'fp{i}', submitted_by=f'user{i}@test.com',
+                submission_method='addon', department=None,
+                original_sender=f'sender@legit-vendor.com',
+                sender_domain='legit-vendor.com',
+                subject=f'Invoice {i}', headers='', body_html='',
+                verdict='phishing', confidence=75, signals=[]
+            )
+            fid = create_feedback(sid, f'user{i}@test.com', 'phishing', 'false_positive')
+            # SOC confirms the feedback
+            with get_db() as conn:
+                conn.execute(
+                    "UPDATE feedback SET review_status = 'confirmed' WHERE id = ?",
+                    (fid,)
+                )
+                conn.commit()
 
         result = check_auto_whitelist('legit-vendor.com', threshold=3)
         assert result is True

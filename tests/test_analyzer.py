@@ -392,6 +392,20 @@ class TestSuspiciousAttachments:
         result = analyzer_instance._check_suspicious_attachments(headers, '')
         assert result is not None
 
+    def test_body_url_no_false_positive(self, analyzer_instance):
+        """URLs in body mentioning .exe/.js should NOT trigger attachment signal."""
+        headers = 'From: user@example.com\nTo: me@example.com'
+        body = '<p>Download from http://example.com/update.exe for the latest version.</p>'
+        result = analyzer_instance._check_suspicious_attachments(headers, body)
+        assert result is None
+
+    def test_body_text_html_no_false_positive(self, analyzer_instance):
+        """Body text mentioning .html files should NOT trigger attachment signal."""
+        headers = 'From: user@example.com'
+        body = '<p>Open the page at https://docs.example.com/guide.html</p>'
+        result = analyzer_instance._check_suspicious_attachments(headers, body)
+        assert result is None
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Financial Keywords
