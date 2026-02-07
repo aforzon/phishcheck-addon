@@ -4,8 +4,6 @@ import json
 from datetime import datetime
 from contextlib import contextmanager
 
-DATABASE_PATH = 'phishcheck.db'
-
 
 def get_db_path():
     from config import DATABASE_PATH
@@ -16,6 +14,7 @@ def get_db_path():
 def get_db():
     conn = sqlite3.connect(get_db_path())
     conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA journal_mode=WAL')
     try:
         yield conn
     finally:
@@ -232,21 +231,18 @@ def get_active_campaigns():
 def get_campaign_alert_level(campaign_id):
     from config import CAMPAIGN_WARNING, CAMPAIGN_ELEVATED, CAMPAIGN_CRITICAL
     with get_db() as conn:
-        # Count submissions in last 4 hours
-        count_4h = conn.execute('''
-            SELECT COUNT(*) FROM submissions
+        row = conn.execute('''
+            SELECT
+                SUM(CASE WHEN submitted_at >= datetime('now', '-1 hour') THEN 1 ELSE 0 END) as count_1h,
+                SUM(CASE WHEN submitted_at >= datetime('now', '-2 hours') THEN 1 ELSE 0 END) as count_2h,
+                SUM(CASE WHEN submitted_at >= datetime('now', '-4 hours') THEN 1 ELSE 0 END) as count_4h
+            FROM submissions
             WHERE campaign_id = ? AND submitted_at >= datetime('now', '-4 hours')
-        ''', (campaign_id,)).fetchone()[0]
+        ''', (campaign_id,)).fetchone()
 
-        count_2h = conn.execute('''
-            SELECT COUNT(*) FROM submissions
-            WHERE campaign_id = ? AND submitted_at >= datetime('now', '-2 hours')
-        ''', (campaign_id,)).fetchone()[0]
-
-        count_1h = conn.execute('''
-            SELECT COUNT(*) FROM submissions
-            WHERE campaign_id = ? AND submitted_at >= datetime('now', '-1 hour')
-        ''', (campaign_id,)).fetchone()[0]
+        count_1h = row['count_1h'] or 0
+        count_2h = row['count_2h'] or 0
+        count_4h = row['count_4h'] or 0
 
         if count_4h >= CAMPAIGN_CRITICAL:
             return 'critical'

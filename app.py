@@ -231,6 +231,12 @@ def api_check():
         submitted_by = data.get('submitted_by', '')
         method = data.get('method', 'addon')
 
+        # Input size validation (max 1MB per field, 2MB total)
+        MAX_FIELD_SIZE = 1_000_000
+        for field_name, field_val in [('headers', headers), ('body_html', body_html)]:
+            if isinstance(field_val, str) and len(field_val) > MAX_FIELD_SIZE:
+                return jsonify({'error': f'{field_name} exceeds maximum size (1MB)'}), 413
+
         if not sender:
             return jsonify({'error': 'Sender is required'}), 400
 
@@ -255,8 +261,7 @@ def api_check():
         # Check if this triggers a CISO alert
         if campaign and config.ENABLE_CISO_ALERTS:
             try:
-                import json as json_module
-                indicators = json_module.loads(campaign.get('indicators', '{}')) if isinstance(campaign.get('indicators'), str) else campaign.get('indicators', {})
+                indicators = json.loads(campaign.get('indicators', '{}')) if isinstance(campaign.get('indicators'), str) else campaign.get('indicators', {})
                 check_campaign_alerts(
                     campaign_id=campaign['id'],
                     campaign_name=campaign.get('name', 'Unknown'),

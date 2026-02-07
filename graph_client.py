@@ -9,6 +9,7 @@ Handles:
 
 import requests
 from datetime import datetime, timedelta
+from html import escape as html_escape
 import logging
 
 logger = logging.getLogger(__name__)
@@ -416,7 +417,7 @@ def format_verdict_email(verdict, confidence, signals, submission_id):
     if signals:
         signal_html = '<ul style="margin: 10px 0; padding-left: 20px;">'
         for signal in signals:
-            signal_html += f'<li>{signal["description"]}</li>'
+            signal_html += f'<li>{html_escape(signal["description"])}</li>'
         signal_html += '</ul>'
 
     # Build feedback URLs (would need actual domain)

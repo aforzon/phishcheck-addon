@@ -112,6 +112,23 @@ class TestApiCheck:
         assert 'verdict' in data
 
     @patch('app.get_graph_client', return_value=None)
+    def test_check_oversized_headers_rejected(self, mock_graph, client):
+        """Input exceeding 1MB should be rejected with 413."""
+        resp = client.post('/api/check', json={
+            'sender': 'test@example.com',
+            'headers': 'X' * 1_100_000,
+        })
+        assert resp.status_code == 413
+
+    @patch('app.get_graph_client', return_value=None)
+    def test_check_oversized_body_rejected(self, mock_graph, client):
+        resp = client.post('/api/check', json={
+            'sender': 'test@example.com',
+            'body_html': '<p>' + 'A' * 1_100_000 + '</p>',
+        })
+        assert resp.status_code == 413
+
+    @patch('app.get_graph_client', return_value=None)
     def test_check_returns_signals(self, mock_graph, client):
         resp = client.post('/api/check', json={
             'sender': 'phish@paypa1.xyz',

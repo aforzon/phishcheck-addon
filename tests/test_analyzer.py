@@ -626,3 +626,34 @@ class TestFullAnalysis:
         """Verify verdict thresholds are respected."""
         assert analyzer_instance.threshold_phishing == 70
         assert analyzer_instance.threshold_suspicious == 40
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# String Similarity (Levenshtein)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestStringSimilarity:
+    def test_identical_strings(self, analyzer_instance):
+        assert analyzer_instance._similar('microsoft', 'microsoft') == 1.0
+
+    def test_empty_strings(self, analyzer_instance):
+        assert analyzer_instance._similar('', 'test') == 0
+        assert analyzer_instance._similar('test', '') == 0
+        assert analyzer_instance._similar('', '') == 0
+
+    def test_one_char_difference(self, analyzer_instance):
+        ratio = analyzer_instance._similar('microsoft', 'microsoft')
+        assert ratio > 0.8
+
+    def test_shifted_string_detected(self, analyzer_instance):
+        """The old positional comparison missed shifted strings. Levenshtein catches them."""
+        ratio = analyzer_instance._similar('xmicrosoft', 'microsoft')
+        assert ratio > 0.8
+
+    def test_completely_different(self, analyzer_instance):
+        ratio = analyzer_instance._similar('abcdef', 'zyxwvu')
+        assert ratio < 0.3
+
+    def test_similar_brand_lookalikes(self, analyzer_instance):
+        assert analyzer_instance._similar('micr0soft', 'microsoft') > 0.8
+        assert analyzer_instance._similar('arnazon', 'amazon') > 0.7

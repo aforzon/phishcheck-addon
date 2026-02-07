@@ -496,11 +496,25 @@ class EmailAnalyzer:
         return False
 
     def _similar(self, a, b):
-        """Simple similarity ratio between two strings."""
+        """Similarity ratio using Levenshtein edit distance."""
         if not a or not b:
             return 0
-        matches = sum(c1 == c2 for c1, c2 in zip(a, b))
-        return matches / max(len(a), len(b))
+        if a == b:
+            return 1.0
+        len_a, len_b = len(a), len(b)
+        # Quick reject if lengths are too different
+        if abs(len_a - len_b) > max(len_a, len_b) * 0.5:
+            return 0
+        # Levenshtein distance via single-row DP
+        prev = list(range(len_b + 1))
+        for i in range(1, len_a + 1):
+            curr = [i] + [0] * len_b
+            for j in range(1, len_b + 1):
+                cost = 0 if a[i - 1] == b[j - 1] else 1
+                curr[j] = min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost)
+            prev = curr
+        distance = prev[len_b]
+        return 1.0 - distance / max(len_a, len_b)
 
     def _check_domain_age(self, domain):
         """

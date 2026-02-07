@@ -29,7 +29,6 @@ def tmp_db(tmp_path):
     config.DATABASE_PATH = db_path
 
     import models
-    models.DATABASE_PATH = db_path
     models.init_db()
 
     yield db_path

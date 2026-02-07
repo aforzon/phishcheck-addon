@@ -9,10 +9,12 @@ Handles:
 import imaplib
 import smtplib
 import email
+import re
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 from email.header import decode_header
+from html import escape as html_escape
 import logging
 import time
 import requests
@@ -21,12 +23,27 @@ from datetime import datetime
 import config
 
 
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
+
+
 def fetch_image_bytes(url, timeout=10):
     """Download image and return raw bytes for CID attachment."""
     try:
-        response = requests.get(url, timeout=timeout)
+        response = requests.get(url, timeout=timeout, stream=True)
         if response.status_code == 200:
-            return response.content
+            content_length = response.headers.get('Content-Length')
+            if content_length and int(content_length) > MAX_IMAGE_SIZE:
+                logging.getLogger(__name__).warning(f'Image too large ({content_length} bytes): {url}')
+                return None
+            chunks = []
+            total = 0
+            for chunk in response.iter_content(8192):
+                total += len(chunk)
+                if total > MAX_IMAGE_SIZE:
+                    logging.getLogger(__name__).warning(f'Image exceeded {MAX_IMAGE_SIZE} bytes: {url}')
+                    return None
+                chunks.append(chunk)
+            return b''.join(chunks)
     except Exception as e:
         logging.getLogger(__name__).warning(f'Failed to fetch image {url}: {e}')
     return None
@@ -235,7 +252,6 @@ class EmailHandler:
 
         Returns (headers_dict, body_content)
         """
-        import re
         headers = {}
         original_body = ''
 
@@ -460,8 +476,8 @@ class EmailHandler:
                         detonation_text += f'    Report: {det["report"]}\n'
 
             # Escape HTML in sender/subject
-            safe_sender = (analyzed_sender or '').replace('<', '&lt;').replace('>', '&gt;')
-            safe_subject = (analyzed_subject or original_subject or '').replace('<', '&lt;').replace('>', '&gt;')
+            safe_sender = html_escape(analyzed_sender or '')
+            safe_subject = html_escape(analyzed_subject or original_subject or '')
 
             html = f'''
             <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; border: 2px solid {header_border}; border-radius: 12px; overflow: hidden;">
